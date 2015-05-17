@@ -1,4 +1,5 @@
-﻿/* 
+﻿#region license
+/* 
  * [Scientific Committee on Advanced Navigation]
  * 			S.C.A.N. Satellite
  *
@@ -8,102 +9,179 @@
  * Copyright (c)2014 technogeeky <technogeeky@gmail.com>;
  * Copyright (c)2014 (Your Name Here) <your email here>; see LICENSE.txt for licensing details.
  */
+#endregion
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
+using FinePrint;
+using FinePrint.Contracts.Parameters;
+using FinePrint.Utilities;
 using UnityEngine;
 
 namespace SCANsat
 {
-	[KSPAddon(KSPAddon.Startup.MainMenu, true)]
-	class SCANreflection : MonoBehaviour
+	static class SCANreflection
 	{
-		internal static bool ORSXFound;
+		private static bool FinePrintWaypointRun = false;
+		private static bool FinePrintFlightBandRun = false;
+		private static bool FinePrintStationaryWaypointRun = false;
 
-		private const string ORSXPlanetDataType = "ORSX.ORSX_PlanetaryResourceMapData";
-		private const string ORSXPixelAbundanceMethod = "getPixelAbundanceValue";
-		private const string ORSXAssemblyName = "ORSX";
+		private static FieldInfo _FinePrintWaypoint;
+		private static FieldInfo _FinePrintFlightBand;
+		private static FieldInfo _FinePrintStationaryWaypoint;
 
-		private static bool ORSXRun = false;
-
-		private delegate double ORSXpixelAbundance(int body, string resourceName, double lat, double lon);
-
-		private static AssemblyLoader.LoadedAssembly ORSXAssembly;
-
-		private static ORSXpixelAbundance _ORSXpixelAbundance;
-
-		internal static double ORSXpixelAbundanceValue(int body, string resourceName, double lat, double lon)
+		internal static Waypoint FinePrintWaypointObject(SurveyWaypointParameter p)
 		{
-			return _ORSXpixelAbundance(body, resourceName, lat, lon);
-		}
-
-		private void Start()
-		{
-			ORSXFound = ORSXReflectionMethod();
-		}
-
-		private static bool ORSXAssemblyLoaded()
-		{
-			if (ORSXAssembly != null)
-				return true;
-
-			AssemblyLoader.LoadedAssembly assembly = AssemblyLoader.loadedAssemblies.FirstOrDefault(a => a.assembly.GetName().Name == ORSXAssemblyName);
-			if (assembly != null)
-			{
-				SCANUtil.SCANlog("ORSX Assembly Loaded");
-				ORSXAssembly = assembly;
-				return true;
-			}
-			SCANUtil.SCANlog("ORSX Assembly Not Found");
-			return false;
-		}
-
-		private static bool ORSXReflectionMethod()
-		{
-			if (ORSXAssemblyLoaded() == false)
-				return false;
-
-			if (_ORSXpixelAbundance != null)
-				return true;
-
-			if (ORSXRun)
-				return false;
-
-			ORSXRun = true;
-
+			Waypoint w = null;
 			try
 			{
-				Type ORSXType = ORSXAssembly.assembly.GetExportedTypes()
-					.SingleOrDefault(t => t.FullName == ORSXPlanetDataType);
-
-				if (ORSXType == null)
-				{
-					SCANUtil.SCANlog("ORSX Type Not Found");
-					return false;
-				}
-
-				MethodInfo ORSXMethod = ORSXType.GetMethod(ORSXPixelAbundanceMethod, new Type[] { typeof(int), typeof(string), typeof(double), typeof(double) });
-
-				if (ORSXMethod == null)
-				{
-					SCANUtil.SCANlog("ORSX Method Not Found");
-					return false;
-				}
-
-				_ORSXpixelAbundance = (ORSXpixelAbundance)Delegate.CreateDelegate(typeof(ORSXpixelAbundance), ORSXMethod);
-
-				SCANUtil.SCANlog("ORSX Reflection Method Assigned");
-
-				return true;
+				w = (Waypoint)_FinePrintWaypoint.GetValue(p);
 			}
 			catch (Exception e)
 			{
-				Debug.LogWarning("[SCANsat] Exception While Loading ORSX Reflection Method: " + e);
+				SCANUtil.SCANlog("Error in detecting FinePrint Waypoint object: {0}", e);
+			}
+
+			return w;
+		}
+
+		internal static Waypoint FinePrintStationaryWaypointObject(StationaryPointParameter p)
+		{
+			Waypoint w = null;
+			try
+			{
+				w = (Waypoint)_FinePrintStationaryWaypoint.GetValue(p);
+			}
+			catch (Exception e)
+			{
+				SCANUtil.SCANlog("Error in detecting FinePrint Stationary Waypoint object: {0}", e);
+			}
+
+			return w;
+		}
+
+		internal static FlightBand FinePrintFlightBandValue(SurveyWaypointParameter p)
+		{
+			FlightBand b = FlightBand.NONE;
+			try
+			{
+				b = (FlightBand)_FinePrintFlightBand.GetValue(p);
+			}
+			catch (Exception e)
+			{
+				SCANUtil.SCANlog("Error in detecting FinePrint FlightBand object: {0}", e);
+			}
+
+			return b;
+		}
+
+		internal static bool FinePrintWaypointReflection()
+		{
+			if (_FinePrintWaypoint != null)
+				return true;
+
+			if (FinePrintWaypointRun)
+				return false;
+
+			FinePrintWaypointRun = true;
+
+			try
+			{
+				Type sType = typeof(SurveyWaypointParameter);
+
+				var field = sType.GetFields(BindingFlags.NonPublic | BindingFlags.Instance);
+
+				_FinePrintWaypoint = field[0];
+
+				if (_FinePrintWaypoint == null)
+				{
+					SCANUtil.SCANlog("FinePrint Waypoint Field Not Found");
+					return false;
+				}
+
+				SCANUtil.SCANlog("FinePrint Waypoint Field Assigned");
+
+				return _FinePrintWaypoint != null;
+			}
+			catch (Exception e)
+			{
+				SCANUtil.SCANlog("Error in assigning FinePrint Waypoint method: {0}", e);
 			}
 
 			return false;
 		}
+
+		internal static bool FinePrintStationaryWaypointReflection()
+		{
+			if (_FinePrintStationaryWaypoint != null)
+				return true;
+
+			if (FinePrintStationaryWaypointRun)
+				return false;
+
+			FinePrintStationaryWaypointRun = true;
+
+			try
+			{
+				Type sType = typeof(StationaryPointParameter);
+
+				var field = sType.GetFields(BindingFlags.NonPublic | BindingFlags.Instance);
+
+				_FinePrintStationaryWaypoint = field[0];
+
+				if (_FinePrintStationaryWaypoint == null)
+				{
+					SCANUtil.SCANlog("FinePrint Stationary Waypoint Field Not Found");
+					return false;
+				}
+
+				SCANUtil.SCANlog("FinePrint Stationary Waypoint Field Assigned");
+
+				return _FinePrintWaypoint != null;
+			}
+			catch (Exception e)
+			{
+				SCANUtil.SCANlog("Error in assigning FinePrint Stationary Waypoint method: {0}", e);
+			}
+
+			return false;
+		}
+
+		internal static bool FinePrintFlightBandReflection()
+		{
+			if (_FinePrintFlightBand != null)
+				return true;
+
+			if (FinePrintFlightBandRun)
+				return false;
+
+			FinePrintFlightBandRun = true;
+
+			try
+			{
+				Type sType = typeof(SurveyWaypointParameter);
+
+				var field = sType.GetFields(BindingFlags.NonPublic | BindingFlags.Instance);
+
+				_FinePrintFlightBand = field[3];
+
+				if (_FinePrintFlightBand == null)
+				{
+					SCANUtil.SCANlog("FinePrint FlightBand Field Not Found");
+					return false;
+				}
+
+				SCANUtil.SCANlog("FinePrint FlightBand Field Assigned");
+
+				return _FinePrintFlightBand != null;
+			}
+			catch (Exception e)
+			{
+				SCANUtil.SCANlog("Error in assigning FinePrint FlightBand method: {0}", e);
+			}
+
+			return false;
+		}
+
 	}
 }
